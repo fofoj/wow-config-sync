@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WoW Classic Era 角色配置同步工具</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  background: #08070b;
+  color: #c8b896;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* 背景纹理 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% -20%, rgba(139,109,48,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 80%, rgba(60,30,10,0.08) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 80%, rgba(60,30,10,0.08) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 暗纹背景 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b896' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 20px;
+  position: relative;
+  z-index: 1;
+}
+
+/* 顶部标题区域 */
+.header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 28px 20px 24px;
+  position: relative;
+}
+
+.header::before, .header::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #6b5a30, #c8a84e, #6b5a30, transparent);
+}
+
+.header::before { top: 0; width: 80%; }
+.header::after { bottom: 0; width: 60%; }
+
+.header-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  display: block;
+  filter: drop-shadow(0 0 12px rgba(255,200,50,0.4));
+}
+
+h1 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 1.9em;
+  font-weight: 700;
+  color: #f0d060;
+  text-shadow: 0 0 30px rgba(240,208,96,0.3), 0 2px 6px rgba(0,0,0,0.9);
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #7a6e54;
+  font-size: 0.88em;
+  letter-spacing: 1px;
+}
+
+/* 装饰分隔线 */
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0;
+  color: #4a3e28;
+  font-size: 0.7em;
+  letter-spacing: 4px;
+}
+
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  max-width: 120px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #3a2e18);
+}
+
+.divider::after {
+  background: linear-gradient(90deg, #3a2e18, transparent);
+}
+
+/* 面板 */
+.panel {
+  background: linear-gradient(180deg, #141210 0%, #0c0b09 100%);
+  border: 1px solid #2e2618;
+  border-radius: 6px;
+  padding: 22px;
+  margin-bottom: 18px;
+  position: relative;
+  box-shadow:
+    0 2px 16px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(200,168,78,0.06);
+}
+
+/* 面板四角装饰 */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #6b5a30 20%, #c8a84e 50%, #6b5a30 80%, transparent 100%);
+  border-radius: 6px 6px 0 0;
+  opacity: 0.5;
+}
+
+.panel-title {
+  font-size: 1em;
+  color: #e8c850;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(200,168,78,0.12);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.panel-title svg {
+  width: 18px;
+  height: 18px;
+  fill: #c8a84e;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* 按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: 1px solid #4a3e28;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #282218 0%, #181410 100%);
+  color: #e8c850;
+  font-family: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  letter-spacing: 0.5px;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(232,200,80,0.06), transparent);
+  transition: left 0.5s;
+}
+
+.btn:hover::after { left: 100%; }
+
+.btn:hover {
+  border-color: #6b5a30;
+  background: linear-gradient(180deg, #342c1e 0%, #201c14 100%);
+  box-shadow: 0 0 16px rgba(232,200,80,0.1);
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #5a4818 0%, #342a10 100%);
+  border: 2px solid #8b7230;
+  font-size: 1.05em;
+  padding: 13px 42px;
+  letter-spacing: 2px;
+  box-shadow: 0 0 20px rgba(139,114,48,0.15), inset 0 1px 0 rgba(255,220,100,0.15);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(180deg, #6b5a22 0%, #3e3414 100%);
+  border-color: #b8962e;
+  box-shadow: 0 0 30px rgba(184,150,46,0.25), inset 0 1px 0 rgba(255,220,100,0.2);
+}
+
+.btn-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-primary:disabled:hover {
+  background: linear-gradient(180deg, #5a4818 0%, #342a10 100%);
+  border-color: #8b7230;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-primary:disabled::after { display: none; }
+
+/* 选择目录区 */
+.dir-section {
+  text-align: center;
+  padding: 40px 30px;
+}
+
+.dir-section .desc {
+  color: #5a5040;
+  font-size: 0.82em;
+  margin-top: 16px;
+  line-height: 1.6;
+}
+
+.dir-path {
+  margin-top: 14px;
+  color: #6b5a40;
+  font-size: 0.85em;
+  word-break: break-all;
+  transition: color 0.3s;
+}
+
+.dir-path.active {
+  color: #68c878;
+  font-weight: 500;
+}
+
+/* 双栏布局 */
+.columns {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  align-items: stretch;
+}
+
+.column-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+}
+
+.column-arrow svg {
+  width: 32px;
+  height: 32px;
+  fill: #4a3e28;
+  opacity: 0.6;
+  filter: drop-shadow(0 0 8px rgba(200,168,78,0.2));
+}
+
+@media (max-width: 840px) {
+  .columns {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .column-arrow {
+    transform: rotate(90deg);
+    padding: 8px 0;
+  }
+  h1 { font-size: 1.4em; letter-spacing: 1px; }
+}
+
+/* 树形目录 */
+.tree-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tree-scroll::-webkit-scrollbar { width: 4px; }
+.tree-scroll::-webkit-scrollbar-track { background: transparent; }
+.tree-scroll::-webkit-scrollbar-thumb { background: #2e2618; border-radius: 2px; }
+.tree-scroll::-webkit-scrollbar-thumb:hover { background: #4a3e28; }
+
+.tree-account {
+  color: #6b5a40;
+  font-size: 0.78em;
+  padding: 6px 12px 3px;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-account svg { width: 12px; height: 12px; fill: #6b5a40; }
+
+.tree-server { margin-bottom: 4px; }
+
+.tree-server-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #b8a878;
+  transition: all 0.15s;
+  user-select: none;
+  font-size: 0.92em;
+}
+
+.tree-server-name:hover {
+  background: rgba(200,168,78,0.06);
+  color: #d8c890;
+}
+
+.tree-server-name.selected {
+  background: rgba(232,200,80,0.1);
+  color: #e8c850;
+  box-shadow: inset 3px 0 0 #c8a84e;
+  border-radius: 0 4px 4px 0;
+}
+
+.tree-server-name svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.tree-server-name .arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s;
+  width: 14px;
+  height: 14px;
+}
+
+.tree-server-name .arrow svg {
+  width: 10px;
+  height: 10px;
+  fill: #6b5a40;
+}
+
+.tree-server-name.expanded .arrow { transform: rotate(90deg); }
+
+.tree-chars {
+  list-style: none;
+  padding-left: 18px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.2s;
+  opacity: 0;
+}
+
+.tree-chars.show {
+  max-height: 500px;
+  opacity: 1;
+}
+
+.tree-char {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #8a7e64;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  margin: 1px 0;
+}
+
+.tree-char:hover {
+  background: rgba(200,168,78,0.06);
+  color: #b8a878;
+}
+
+.tree-char.selected {
+  background: rgba(232,200,80,0.1);
+  color: #e8c850;
+  box-shadow: inset 3px 0 0 #c8a84e;
+  border-radius: 0 4px 4px 0;
+}
+
+.tree-char svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.5;
+}
+
+.tree-char.selected svg { opacity: 0.9; }
+
+/* 同步选项 */
+.sync-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.sync-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #1e1a12;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.sync-option:hover {
+  border-color: #2e2618;
+  background: rgba(200,168,78,0.03);
+}
+
+.sync-option input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #3a3020;
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.2s;
+  background: #0c0b09;
+}
+
+.sync-option input[type="checkbox"]:checked {
+  background: linear-gradient(180deg, #6b5a22, #4a3e18);
+  border-color: #c8a84e;
+}
+
+.sync-option input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 6px;
+  height: 10px;
+  border: solid #f0d060;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.sync-option .opt-info { flex: 1; }
+
+.sync-option .opt-name {
+  color: #b8a878;
+  font-size: 0.88em;
+  font-weight: 500;
+}
+
+.sync-option .opt-desc {
+  color: #5a5040;
+  font-size: 0.75em;
+  margin-top: 2px;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* 同步按钮区 */
+.sync-action {
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.sync-summary {
+  margin-bottom: 18px;
+  font-size: 0.9em;
+  color: #7a6e54;
+  line-height: 1.6;
+}
+
+.sync-summary strong { color: #e8c850; }
+
+/* 进度条 */
+.progress-bar {
+  width: 100%;
+  max-width: 400px;
+  height: 8px;
+  background: #141210;
+  border: 1px solid #2e2618;
+  border-radius: 4px;
+  margin: 14px auto;
+  overflow: hidden;
+  display: none;
+}
+
+.progress-bar.active { display: block; }
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b7230, #e8c850, #8b7230);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 日志 */
+.log-container {
+  max-height: 280px;
+  overflow-y: auto;
+  background: #0a0908;
+  border: 1px solid #1e1a12;
+  border-radius: 4px;
+  padding: 14px 16px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.8em;
+  line-height: 1.7;
+}
+
+.log-container::-webkit-scrollbar { width: 4px; }
+.log-container::-webkit-scrollbar-track { background: transparent; }
+.log-container::-webkit-scrollbar-thumb { background: #2e2618; border-radius: 2px; }
+
+.log-entry {
+  padding: 1px 0;
+  display: flex;
+  gap: 8px;
+}
+
+.log-time { color: #3a3420; flex-shrink: 0; }
+.log-info .log-msg { color: #7a6e54; }
+.log-success .log-msg { color: #68c878; }
+.log-warn .log-msg { color: #d8a840; }
+.log-error .log-msg { color: #d84848; }
+.log-file .log-msg { color: #5888c0; }
+
+/* 选中信息条 */
+.selection-info {
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: rgba(232,200,80,0.04);
+  border: 1px solid rgba(200,168,78,0.1);
+  border-radius: 4px;
+  font-size: 0.82em;
+  color: #b8a878;
+  display: none;
+  animation: fadeIn 0.2s;
+}
+
+.selection-info.show { display: flex; align-items: center; gap: 8px; }
+
+.selection-info svg { width: 14px; height: 14px; fill: #68c878; flex-shrink: 0; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 范围切换 */
+.scope-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.scope-btn {
+  padding: 7px 18px;
+  border: 1px solid #2e2618;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b5a40;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85em;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.scope-btn.active {
+  background: rgba(232,200,80,0.08);
+  border-color: #6b5a30;
+  color: #e8c850;
+}
+
+.scope-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: #c8a84e;
+  border-radius: 1px;
+}
+
+.scope-btn:hover:not(.active) {
+  border-color: #3a3020;
+  color: #8a7e64;
+}
+
+.scope-desc {
+  font-size: 0.78em;
+  color: #4a4030;
+  line-height: 1.5;
+}
+
+/* 空状态 */
+.empty-hint {
+  color: #3a3420;
+  text-align: center;
+  padding: 36px 20px;
+  font-size: 0.88em;
+}
+
+.empty-hint svg {
+  width: 36px;
+  height: 36px;
+  fill: #2e2618;
+  margin-bottom: 12px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 兼容提示 */
+.notice {
+  text-align: center;
+  padding: 18px;
+  color: #d8a840;
+  font-size: 0.88em;
+  border: 1px solid #4a3e28;
+  border-radius: 6px;
+  background: rgba(216,168,64,0.04);
+  line-height: 1.7;
+}
+
+/* 统计条 */
+.stats-bar {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(200,168,78,0.08);
+}
+
+.stat-item {
+  text-align: center;
+  font-size: 0.78em;
+  color: #5a5040;
+}
+
+.stat-item .stat-val {
+  font-size: 1.6em;
+  color: #c8a84e;
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+}
+
+/* 完成动画 */
+.sync-done {
+  animation: glow 1.5s ease-in-out;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 2px 16px rgba(0,0,0,0.5); }
+  50% { box-shadow: 0 0 30px rgba(104,200,120,0.15), 0 2px 16px rgba(0,0,0,0.5); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- 头部 -->
+  <div class="header">
+    <svg class="header-icon" viewBox="0 0 24 24" fill="#c8a84e">
+      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+    </svg>
+    <h1>CONFIG SYNC</h1>
+    <div class="divider">WoW Classic Era</div>
+    <p class="subtitle">角色转服配置一键迁移工具</p>
+  </div>
+
+  <!-- 浏览器兼容提示 -->
+  <div id="compatNotice" class="panel notice" style="display:none;">
+    <strong>浏览器不兼容</strong><br>
+    此工具需要 Chrome 86+ 或 Edge 86+ 浏览器支持 File System Access API。
+  </div>
+
+  <!-- 选择目录 -->
+  <div class="panel dir-section" id="dirSection">
+    <button class="btn btn-primary" id="btnSelectDir" onclick="selectDirectory()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+      选择 WoW 安装目录
+    </button>
+    <div class="dir-path" id="dirPath">选择魔兽世界根目录（包含 _classic_era_ 文件夹）</div>
+    <p class="desc">也可以直接选择 _classic_era_ 目录</p>
+  </div>
+
+  <!-- 主操作区 -->
+  <div id="mainArea" style="display:none;">
+    <!-- 范围切换 -->
+    <div class="panel">
+      <div class="panel-title">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        同步范围
+      </div>
+      <div class="scope-toggle">
+        <button class="scope-btn active" onclick="setScope('char')" id="scopeChar">角色级别</button>
+        <button class="scope-btn" onclick="setScope('server')" id="scopeServer">服务器级别</button>
+      </div>
+      <p class="scope-desc">角色级别：同步单个角色的全部配置文件 &nbsp;|&nbsp; 服务器级别：同步服务器目录下的 SavedVariables</p>
+    </div>
+
+    <!-- 双栏选择 -->
+    <div class="columns">
+      <div class="panel">
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+          源 (复制来源)
+        </div>
+        <div class="tree-scroll" id="sourceTree"><div class="empty-hint">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          等待扫描...
+        </div></div>
+        <div class="selection-info" id="sourceInfo"></div>
+      </div>
+
+      <div class="column-arrow">
+        <svg viewBox="0 0 24 24"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M5 4v2h14V4H5zm0 10h4v6h6v-6h4l-7-7-7 7z"/></svg>
+          目标 (复制到)
+        </div>
+        <div class="tree-scroll" id="targetTree"><div class="empty-hint">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          等待扫描...
+        </div></div>
+        <div class="selection-info" id="targetInfo"></div>
+      </div>
+    </div>
+
+    <!-- 同步选项 -->
+    <div class="panel" id="optionsPanel">
+      <div class="panel-title">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.44.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        同步内容
+      </div>
+      <div class="sync-options" id="syncOptions"></div>
+    </div>
+
+    <!-- 同步执行 -->
+    <div class="panel sync-action" id="syncActionPanel">
+      <div class="sync-summary" id="syncSummary">请在左右两栏分别选择源和目标</div>
+      <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+      <button class="btn btn-primary" id="btnSync" onclick="doSync()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+        一键同步
+      </button>
+    </div>
+
+    <!-- 日志 -->
+    <div class="panel" id="logPanel" style="display:none;">
+      <div class="panel-title">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        同步日志
+      </div>
+      <div class="log-container" id="logContent"></div>
+      <div class="stats-bar" id="statsBar" style="display:none;">
+        <div class="stat-item"><div class="stat-val" id="statFiles">0</div>文件</div>
+        <div class="stat-item"><div class="stat-val" id="statSkipped">0</div>跳过</div>
+        <div class="stat-item"><div class="stat-val" id="statErrors">0</div>错误</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ 状态 ============
+let rootHandle = null;
+let wtfHandle = null;
+let accountsData = {};
+let sourceSelection = null;
+let targetSelection = null;
+let currentScope = 'char';
+let syncStats = { files: 0, skipped: 0, errors: 0 };
+
+const CHAR_SYNC_OPTIONS = [
+  { id: 'savedvars', name: '插件数据', desc: 'SavedVariables/', checked: true },
+  { id: 'layout', name: '动作条布局', desc: 'layout-local.txt', checked: true },
+  { id: 'macros', name: '宏', desc: 'macros-cache.txt', checked: true },
+  { id: 'bindings', name: '键位绑定', desc: 'bindings-cache.wtf', checked: true },
+  { id: 'chat', name: '聊天设置', desc: 'chat-cache.txt', checked: true },
+  { id: 'config', name: '游戏设置', desc: 'config-cache.wtf', checked: false },
+];
+
+const SERVER_SYNC_OPTIONS = [
+  { id: 'server_savedvars', name: '服务器插件数据', desc: 'SavedVariables/', checked: true },
+];
+
+// SVG 图标
+const ICONS = {
+  chevron: '<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>',
+  server: '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
+  char: '<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
+  account: '<svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+};
+
+// ============ 兼容性检查 ============
+if (!('showDirectoryPicker' in window)) {
+  document.getElementById('compatNotice').style.display = 'block';
+  document.getElementById('btnSelectDir').disabled = true;
+}
+
+// ============ 选择目录 ============
+async function selectDirectory() {
+  try {
+    rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    let classicHandle;
+    try {
+      classicHandle = await rootHandle.getDirectoryHandle('_classic_era_');
+    } catch {
+      try {
+        await rootHandle.getDirectoryHandle('WTF');
+        classicHandle = rootHandle;
+      } catch {
+        alert('未找到 _classic_era_/WTF 目录，请选择正确的魔兽世界安装根目录。');
+        return;
+      }
+    }
+
+    try {
+      wtfHandle = await classicHandle.getDirectoryHandle('WTF');
+    } catch {
+      alert('未找到 WTF 目录，请确认游戏目录结构正确。');
+      return;
+    }
+
+    document.getElementById('dirPath').textContent = '\u2713 已选择: ' + rootHandle.name;
+    document.getElementById('dirPath').className = 'dir-path active';
+    document.getElementById('mainArea').style.display = 'block';
+
+    await scanAccounts();
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.error(e);
+      alert('选择目录失败: ' + e.message);
+    }
+  }
+}
+
+// ============ 扫描 ============
+async function scanAccounts() {
+  accountsData = {};
+  try {
+    const accountDir = await wtfHandle.getDirectoryHandle('Account');
+    for await (const [accName, accHandle] of accountDir.entries()) {
+      if (accHandle.kind !== 'directory' || accName === 'SavedVariables') continue;
+      accountsData[accName] = { servers: {}, handle: accHandle };
+      for await (const [srvName, srvHandle] of accHandle.entries()) {
+        if (srvHandle.kind !== 'directory' || srvName === 'SavedVariables') continue;
+        const chars = [];
+        for await (const [charName, charHandle] of srvHandle.entries()) {
+          if (charHandle.kind === 'directory') chars.push(charName);
+        }
+        if (chars.length > 0) {
+          accountsData[accName].servers[srvName] = chars.sort();
+        }
+      }
+    }
+  } catch (e) {
+    console.error(e);
+    const errHtml = '<div class="empty-hint">扫描失败: ' + e.message + '</div>';
+    document.getElementById('sourceTree').innerHTML = errHtml;
+    document.getElementById('targetTree').innerHTML = errHtml;
+    return;
+  }
+  renderTrees();
+  renderOptions();
+}
+
+// ============ 渲染树 ============
+function renderTrees() {
+  document.getElementById('sourceTree').innerHTML = buildTreeHTML('source');
+  document.getElementById('targetTree').innerHTML = buildTreeHTML('target');
+  updateSyncSummary();
+}
+
+function buildTreeHTML(side) {
+  const accounts = Object.keys(accountsData);
+  if (accounts.length === 0) return '<div class="empty-hint">' + ICONS.char + '未找到任何账号/角色</div>';
+
+  let html = '';
+  const showAccount = accounts.length > 1;
+  for (const acc of accounts) {
+    const servers = Object.keys(accountsData[acc].servers);
+    if (showAccount) {
+      html += '<div class="tree-account">' + ICONS.account + ' ' + acc + '</div>';
+    }
+    for (const srv of servers) {
+      const srvId = side + '_' + acc + '_' + srv;
+      html += '<div class="tree-server">';
+      if (currentScope === 'server') {
+        html += '<div class="tree-server-name" onclick="selectServer(\'' + side + '\',\'' + esc(acc) + '\',\'' + esc(srv) + '\', this)">'
+          + ICONS.server + ' ' + srv + '</div>';
+      } else {
+        html += '<div class="tree-server-name" onclick="toggleServer(\'' + srvId + '\', this)">'
+          + '<span class="arrow">' + ICONS.chevron + '</span> '
+          + ICONS.server + ' ' + srv + '</div>';
+        html += '<ul class="tree-chars" id="' + srvId + '">';
+        for (const ch of accountsData[acc].servers[srv]) {
+          html += '<li class="tree-char" onclick="selectChar(\'' + side + '\',\'' + esc(acc) + '\',\'' + esc(srv) + '\',\'' + esc(ch) + '\', this)">'
+            + ICONS.char + ' ' + ch + '</li>';
+        }
+        html += '</ul>';
+      }
+      html += '</div>';
+    }
+  }
+  return html;
+}
+
+function esc(s) { return s.replace(/'/g, "\\'").replace(/\\/g, "\\\\"); }
+
+function toggleServer(id, el) {
+  const ul = document.getElementById(id);
+  ul.classList.toggle('show');
+  el.classList.toggle('expanded');
+}
+
+// ============ 选择 ============
+function selectChar(side, account, server, char, el) {
+  const container = document.getElementById(side === 'source' ? 'sourceTree' : 'targetTree');
+  container.querySelectorAll('.tree-char.selected').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const sel = { account, server, char };
+  if (side === 'source') {
+    sourceSelection = sel;
+    showSelectionInfo('sourceInfo', server + ' / ' + char);
+  } else {
+    targetSelection = sel;
+    showSelectionInfo('targetInfo', server + ' / ' + char);
+  }
+  updateSyncSummary();
+}
+
+function selectServer(side, account, server, el) {
+  const container = document.getElementById(side === 'source' ? 'sourceTree' : 'targetTree');
+  container.querySelectorAll('.tree-server-name.selected').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const sel = { account, server };
+  if (side === 'source') {
+    sourceSelection = sel;
+    showSelectionInfo('sourceInfo', account + ' / ' + server);
+  } else {
+    targetSelection = sel;
+    showSelectionInfo('targetInfo', account + ' / ' + server);
+  }
+  updateSyncSummary();
+}
+
+function showSelectionInfo(id, text) {
+  const el = document.getElementById(id);
+  el.innerHTML = ICONS.check + ' <span>' + text + '</span>';
+  el.classList.add('show');
+}
+
+// ============ 范围 ============
+function setScope(scope) {
+  currentScope = scope;
+  document.getElementById('scopeChar').classList.toggle('active', scope === 'char');
+  document.getElementById('scopeServer').classList.toggle('active', scope === 'server');
+  sourceSelection = null;
+  targetSelection = null;
+  document.getElementById('sourceInfo').classList.remove('show');
+  document.getElementById('targetInfo').classList.remove('show');
+  renderTrees();
+  renderOptions();
+}
+
+// ============ 选项 ============
+function renderOptions() {
+  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
+  document.getElementById('syncOptions').innerHTML = opts.map(o =>
+    '<label class="sync-option">' +
+      '<input type="checkbox" id="opt_' + o.id + '"' + (o.checked ? ' checked' : '') + '>' +
+      '<div class="opt-info"><div class="opt-name">' + o.name + '</div>' +
+      '<div class="opt-desc">' + o.desc + '</div></div></label>'
+  ).join('');
+}
+
+// ============ 摘要 ============
+function updateSyncSummary() {
+  const el = document.getElementById('syncSummary');
+  const btn = document.getElementById('btnSync');
+  if (!sourceSelection || !targetSelection) {
+    el.innerHTML = '请在左右两栏分别选择源和目标';
+    btn.disabled = true;
+    return;
+  }
+  const srcLabel = sourceSelection.char ? sourceSelection.server + ' / ' + sourceSelection.char : sourceSelection.server;
+  const tgtLabel = targetSelection.char ? targetSelection.server + ' / ' + targetSelection.char : targetSelection.server;
+
+  if (sourceSelection.account === targetSelection.account &&
+      sourceSelection.server === targetSelection.server &&
+      sourceSelection.char === targetSelection.char) {
+    el.innerHTML = '源和目标相同，请选择不同的角色/服务器';
+    btn.disabled = true;
+    return;
+  }
+
+  el.innerHTML = '<strong>' + srcLabel + '</strong> &nbsp;&rarr;&nbsp; <strong>' + tgtLabel + '</strong>';
+  btn.disabled = false;
+}
+
+// ============ 日志 ============
+function log(msg, type) {
+  type = type || 'info';
+  const panel = document.getElementById('logPanel');
+  const content = document.getElementById('logContent');
+  panel.style.display = 'block';
+  const entry = document.createElement('div');
+  entry.className = 'log-entry log-' + type;
+  const time = new Date().toLocaleTimeString();
+  entry.innerHTML = '<span class="log-time">' + time + '</span><span class="log-msg">' + msg + '</span>';
+  content.appendChild(entry);
+  content.scrollTop = content.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logContent').innerHTML = '';
+  syncStats = { files: 0, skipped: 0, errors: 0 };
+}
+
+function updateStats() {
+  const bar = document.getElementById('statsBar');
+  bar.style.display = 'flex';
+  document.getElementById('statFiles').textContent = syncStats.files;
+  document.getElementById('statSkipped').textContent = syncStats.skipped;
+  document.getElementById('statErrors').textContent = syncStats.errors;
+}
+
+// ============ 文件操作 ============
+async function getCharDir(account, server, char) {
+  const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(account);
+  const serverDir = await accountDir.getDirectoryHandle(server);
+  return await serverDir.getDirectoryHandle(char);
+}
+
+async function getServerDir(account, server) {
+  const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(account);
+  return await accountDir.getDirectoryHandle(server);
+}
+
+async function copyFile(srcDir, destDir, fileName) {
+  try {
+    const srcFile = await srcDir.getFileHandle(fileName);
+    const file = await srcFile.getFile();
+    const content = await file.arrayBuffer();
+    const destFile = await destDir.getFileHandle(fileName, { create: true });
+    const writable = await destFile.createWritable();
+    await writable.write(content);
+    await writable.close();
+    syncStats.files++;
+    return true;
+  } catch (e) {
+    if (e.name === 'NotFoundError') { syncStats.skipped++; return false; }
+    syncStats.errors++;
+    throw e;
+  }
+}
+
+async function copyDirectory(srcDir, destDir, dirName, depth) {
+  depth = depth || 0;
+  let count = 0;
+  try {
+    const srcSub = await srcDir.getDirectoryHandle(dirName);
+    const destSub = await destDir.getDirectoryHandle(dirName, { create: true });
+
+    for await (const [name, handle] of srcSub.entries()) {
+      if (handle.kind === 'file') {
+        const file = await handle.getFile();
+        const content = await file.arrayBuffer();
+        const destFile = await destSub.getFileHandle(name, { create: true });
+        const writable = await destFile.createWritable();
+        await writable.write(content);
+        await writable.close();
+        count++;
+        syncStats.files++;
+        if (depth === 0) log('&nbsp;&nbsp;' + dirName + '/' + name, 'file');
+      } else if (handle.kind === 'directory') {
+        count += await copyDirectory(srcSub, destSub, name, depth + 1);
+      }
+    }
+  } catch (e) {
+    if (e.name === 'NotFoundError') {
+      log('目录不存在: ' + dirName + '，已跳过', 'warn');
+      syncStats.skipped++;
+      return 0;
+    }
+    syncStats.errors++;
+    throw e;
+  }
+  return count;
+}
+
+// ============ 同步 ============
+async function doSync() {
+  if (!sourceSelection || !targetSelection) return;
+
+  const btn = document.getElementById('btnSync');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="spin"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg> 同步中...';
+
+  // 添加旋转动画
+  const style = document.createElement('style');
+  style.id = 'spinStyle';
+  style.textContent = '.spin { animation: spin 1s linear infinite; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+  progressFill.style.width = '0%';
+  progressBar.classList.add('active');
+
+  clearLog();
+  log('开始同步...', 'info');
+
+  try {
+    if (currentScope === 'char') {
+      await syncChar(progressFill);
+    } else {
+      await syncServer(progressFill);
+    }
+    log('同步完成！', 'success');
+    document.getElementById('syncActionPanel').classList.add('sync-done');
+    setTimeout(() => document.getElementById('syncActionPanel').classList.remove('sync-done'), 1500);
+  } catch (e) {
+    console.error(e);
+    log('同步失败: ' + e.message, 'error');
+  }
+
+  updateStats();
+  progressFill.style.width = '100%';
+
+  const spinStyle = document.getElementById('spinStyle');
+  if (spinStyle) spinStyle.remove();
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg> 一键同步';
+  updateSyncSummary();
+}
+
+async function syncChar(progressFill) {
+  const src = sourceSelection;
+  const tgt = targetSelection;
+  log('源: ' + src.server + ' / ' + src.char, 'info');
+  log('目标: ' + tgt.server + ' / ' + tgt.char, 'info');
+
+  const srcDir = await getCharDir(src.account, src.server, src.char);
+  const tgtAccountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(tgt.account);
+  const tgtServerDir = await tgtAccountDir.getDirectoryHandle(tgt.server, { create: true });
+  const tgtCharDir = await tgtServerDir.getDirectoryHandle(tgt.char, { create: true });
+
+  const opts = getCheckedOptions();
+  const total = opts.length;
+  let step = 0;
+
+  const fileMap = {
+    layout: 'layout-local.txt',
+    macros: 'macros-cache.txt',
+    bindings: 'bindings-cache.wtf',
+    chat: 'chat-cache.txt',
+    config: 'config-cache.wtf',
+  };
+
+  const nameMap = {
+    savedvars: '插件数据',
+    layout: '动作条布局',
+    macros: '宏',
+    bindings: '键位绑定',
+    chat: '聊天设置',
+    config: '游戏设置',
+  };
+
+  for (const opt of opts) {
+    step++;
+    progressFill.style.width = ((step / total) * 90) + '%';
+
+    if (opt === 'savedvars') {
+      log('同步插件数据 (SavedVariables/)...', 'info');
+      const c = await copyDirectory(srcDir, tgtCharDir, 'SavedVariables');
+      log('插件数据: ' + c + ' 个文件已同步', 'success');
+    } else if (fileMap[opt]) {
+      log('同步' + nameMap[opt] + ' (' + fileMap[opt] + ')...', 'info');
+      if (await copyFile(srcDir, tgtCharDir, fileMap[opt])) {
+        log(nameMap[opt] + ': 完成', 'success');
+      } else {
+        log(fileMap[opt] + ' 不存在，已跳过', 'warn');
+      }
+    }
+  }
+}
+
+async function syncServer(progressFill) {
+  const src = sourceSelection;
+  const tgt = targetSelection;
+  log('源: ' + src.account + ' / ' + src.server, 'info');
+  log('目标: ' + tgt.account + ' / ' + tgt.server, 'info');
+
+  const srcDir = await getServerDir(src.account, src.server);
+  const tgtAccountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(tgt.account);
+  const tgtServerDir = await tgtAccountDir.getDirectoryHandle(tgt.server, { create: true });
+
+  progressFill.style.width = '30%';
+  log('同步服务器级插件数据 (SavedVariables/)...', 'info');
+  const count = await copyDirectory(srcDir, tgtServerDir, 'SavedVariables');
+  log('服务器插件数据: ' + count + ' 个文件已同步', 'success');
+  progressFill.style.width = '90%';
+}
+
+function getCheckedOptions() {
+  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
+  return opts.filter(function(o) {
+    var el = document.getElementById('opt_' + o.id);
+    return el && el.checked;
+  }).map(function(o) { return o.id; });
+}
+
+renderOptions();
+</script>
+</body>
+</html>
