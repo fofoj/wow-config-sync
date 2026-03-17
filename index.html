@@ -1323,16 +1323,6 @@ async function cloneAccountSVEntries(account, srcServer, srcChar, tgtServer, tgt
     return 0;
   }
 
-  // 常见的角色标识格式（按优先级排列）
-  const keyPairs = [
-    [srcChar + ' - ' + srcServer, tgtChar + ' - ' + tgtServer],
-    [srcChar + '-' + srcServer, tgtChar + '-' + tgtServer],
-  ];
-  // 仅角色名（当源和目标角色名不同时才匹配，避免误替换）
-  if (srcChar !== tgtChar) {
-    keyPairs.push([srcChar, tgtChar]);
-  }
-
   let fileCount = 0;
 
   for await (const [name, handle] of svDir.entries()) {
@@ -1343,9 +1333,31 @@ async function cloneAccountSVEntries(account, srcServer, srcChar, tgtServer, tgt
 
     if (!content.includes(srcChar)) continue;
 
+    // 动态查找所有包含源角色名的 table key: ["...srcChar..."] =
+    // 收集所有需要克隆的 srcKey → tgtKey 对
+    const srcCharEsc = srcChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const keyRegex = new RegExp('\\["([^"]*' + srcCharEsc + '[^"]*)"\\]\\s*=', 'g');
+    const foundPairs = new Map();
+
+    let m;
+    while ((m = keyRegex.exec(content)) !== null) {
+      const srcKey = m[1];
+      if (foundPairs.has(srcKey)) continue;
+      // 构造目标 key：替换角色名和服务器名
+      let tgtKey = srcKey.split(srcChar).join(tgtChar);
+      if (srcServer !== tgtServer) {
+        tgtKey = tgtKey.split(srcServer).join(tgtServer);
+      }
+      if (srcKey !== tgtKey) {
+        foundPairs.set(srcKey, tgtKey);
+      }
+    }
+
+    if (foundPairs.size === 0) continue;
+
     let modified = false;
 
-    for (const [srcKey, tgtKey] of keyPairs) {
+    for (const [srcKey, tgtKey] of foundPairs) {
       const result = cloneEntryInLua(content, srcKey, tgtKey);
       if (result.count > 0) {
         content = result.content;
