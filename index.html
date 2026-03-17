@@ -826,6 +826,7 @@ let syncStats = { files: 0, skipped: 0, errors: 0 };
 const CHAR_SYNC_OPTIONS = [
   { id: 'savedvars', name: '角色插件数据', desc: '角色/SavedVariables/', checked: true },
   { id: 'server_savedvars', name: '服务器插件数据', desc: '服务器/SavedVariables/', checked: true },
+  { id: 'clone_sv', name: '克隆账号插件数据', desc: '按角色名克隆账号级SV', checked: true },
   { id: 'layout', name: '动作条布局', desc: 'layout-local.txt', checked: true },
   { id: 'macros', name: '宏', desc: 'macros-cache.txt', checked: true },
   { id: 'bindings', name: '键位绑定', desc: 'bindings-cache.wtf', checked: true },
@@ -1239,6 +1240,120 @@ async function doSync() {
   updateSyncSummary();
 }
 
+// 在账号级 SavedVariables 中克隆角色数据条目
+async function cloneAccountSVEntries(account, srcServer, srcChar, tgtServer, tgtChar) {
+  const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(account);
+  let svDir;
+  try {
+    svDir = await accountDir.getDirectoryHandle('SavedVariables');
+  } catch {
+    log('账号级 SavedVariables 不存在，跳过', 'warn');
+    return 0;
+  }
+
+  // 常见的角色标识格式
+  const keyPairs = [
+    [srcChar + ' - ' + srcServer, tgtChar + ' - ' + tgtServer],
+    [srcChar + '-' + srcServer, tgtChar + '-' + tgtServer],
+  ];
+
+  let fileCount = 0;
+
+  for await (const [name, handle] of svDir.entries()) {
+    if (handle.kind !== 'file' || (!name.endsWith('.lua') && !name.endsWith('.lua.bak'))) continue;
+    if (!name.endsWith('.lua')) continue;
+
+    const file = await handle.getFile();
+    let content = await file.text();
+
+    if (!content.includes(srcChar)) continue;
+
+    let modified = false;
+
+    for (const [srcKey, tgtKey] of keyPairs) {
+      const srcToken = '["' + srcKey + '"]';
+      const tgtToken = '["' + tgtKey + '"]';
+
+      if (content.includes(tgtToken)) continue;
+      if (!content.includes(srcToken)) continue;
+
+      let searchFrom = 0;
+      while (true) {
+        const keyIdx = content.indexOf(srcToken, searchFrom);
+        if (keyIdx === -1) break;
+
+        // 找到本行开头
+        let lineStart = content.lastIndexOf('\n', keyIdx);
+        lineStart = lineStart === -1 ? 0 : lineStart + 1;
+
+        // 找 = 号
+        const eqIdx = content.indexOf('=', keyIdx + srcToken.length);
+        if (eqIdx === -1) { searchFrom = keyIdx + 1; continue; }
+
+        // 跳过空白找值的开始
+        let valStart = eqIdx + 1;
+        while (valStart < content.length && (content[valStart] === ' ' || content[valStart] === '\t')) valStart++;
+
+        let blockEnd;
+        if (content[valStart] === '{') {
+          // 表值 - 追踪大括号深度
+          let depth = 1;
+          let pos = valStart + 1;
+          let inString = false;
+          let stringChar = '';
+          while (pos < content.length && depth > 0) {
+            const ch = content[pos];
+            if (inString) {
+              if (ch === '\\') { pos += 2; continue; }
+              if (ch === stringChar) inString = false;
+            } else {
+              if (ch === '"') { inString = true; stringChar = '"'; }
+              else if (ch === '{') depth++;
+              else if (ch === '}') depth--;
+              else if (ch === '-' && content[pos + 1] === '-') {
+                // 跳过注释到行尾
+                const nlIdx = content.indexOf('\n', pos);
+                pos = nlIdx === -1 ? content.length : nlIdx;
+                continue;
+              }
+            }
+            pos++;
+          }
+          blockEnd = pos;
+        } else {
+          // 简单值 - 找到行尾或逗号
+          blockEnd = valStart;
+          while (blockEnd < content.length && content[blockEnd] !== '\n') blockEnd++;
+        }
+
+        // 包含尾部逗号和换行
+        if (blockEnd < content.length && content[blockEnd] === ',') blockEnd++;
+        while (blockEnd < content.length && (content[blockEnd] === '\r' || content[blockEnd] === '\n')) { blockEnd++; break; }
+
+        // 提取并克隆
+        const block = content.substring(lineStart, blockEnd);
+        const clonedBlock = block.split(srcKey).join(tgtKey);
+
+        content = content.substring(0, blockEnd) + clonedBlock + content.substring(blockEnd);
+        modified = true;
+        log('&nbsp;&nbsp;' + name + ': ' + srcKey + ' → ' + tgtKey, 'file');
+
+        searchFrom = blockEnd + clonedBlock.length;
+      }
+    }
+
+    if (modified) {
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      syncStats.files++;
+      fileCount++;
+    }
+  }
+
+  return fileCount;
+}
+
 async function syncChar(progressFill) {
   const src = sourceSelection;
   const tgt = targetSelection;
@@ -1287,6 +1402,14 @@ async function syncChar(progressFill) {
       log('同步服务器插件数据 (服务器/SavedVariables/)...', 'info');
       const c = await copyDirectory(srcServerDir, tgtServerDir, 'SavedVariables');
       log('服务器插件数据: ' + c + ' 个文件已同步', 'success');
+    } else if (opt === 'clone_sv') {
+      log('克隆账号级插件数据 (按角色名)...', 'info');
+      const c = await cloneAccountSVEntries(tgt.account, src.server, src.char, tgt.server, tgt.char);
+      if (c > 0) {
+        log('账号插件数据: 在 ' + c + ' 个文件中克隆了角色数据', 'success');
+      } else {
+        log('账号插件数据: 未找到需要克隆的条目', 'warn');
+      }
     } else if (fileMap[opt]) {
       log('同步' + nameMap[opt] + ' (' + fileMap[opt] + ')...', 'info');
       if (await copyFile(srcDir, tgtCharDir, fileMap[opt])) {
