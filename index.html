@@ -825,7 +825,6 @@ let syncStats = { files: 0, skipped: 0, errors: 0 };
 
 const CHAR_SYNC_OPTIONS = [
   { id: 'savedvars', name: '角色插件数据', desc: '角色/SavedVariables/', checked: true },
-  { id: 'server_savedvars', name: '服务器插件数据', desc: '服务器/SavedVariables/', checked: true },
   { id: 'clone_sv', name: '克隆账号插件数据', desc: '按角色名克隆账号级SV', checked: true },
   { id: 'layout', name: '动作条布局', desc: 'layout-local.txt', checked: true },
   { id: 'macros', name: '宏', desc: 'macros-cache.txt', checked: true },
@@ -1361,7 +1360,6 @@ async function syncChar(progressFill) {
   log('目标: ' + tgt.server + ' / ' + tgt.char, 'info');
 
   const srcDir = await getCharDir(src.account, src.server, src.char);
-  const srcServerDir = await getServerDir(src.account, src.server);
   const tgtAccountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(tgt.account);
   const tgtServerDir = await tgtAccountDir.getDirectoryHandle(tgt.server, { create: true });
   const tgtCharDir = await tgtServerDir.getDirectoryHandle(tgt.char, { create: true });
@@ -1381,7 +1379,6 @@ async function syncChar(progressFill) {
 
   const nameMap = {
     savedvars: '角色插件数据',
-    server_savedvars: '服务器插件数据',
     layout: '动作条布局',
     macros: '宏',
     bindings: '键位绑定',
@@ -1398,10 +1395,6 @@ async function syncChar(progressFill) {
       log('同步角色插件数据 (角色/SavedVariables/)...', 'info');
       const c = await copyDirectory(srcDir, tgtCharDir, 'SavedVariables');
       log('角色插件数据: ' + c + ' 个文件已同步', 'success');
-    } else if (opt === 'server_savedvars') {
-      log('同步服务器插件数据 (服务器/SavedVariables/)...', 'info');
-      const c = await copyDirectory(srcServerDir, tgtServerDir, 'SavedVariables');
-      log('服务器插件数据: ' + c + ' 个文件已同步', 'success');
     } else if (opt === 'clone_sv') {
       log('克隆账号级插件数据 (按角色名)...', 'info');
       const c = await cloneAccountSVEntries(tgt.account, src.server, src.char, tgt.server, tgt.char);
