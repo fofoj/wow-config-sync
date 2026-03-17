@@ -829,6 +829,7 @@ const CHAR_SYNC_OPTIONS = [
   { id: 'bindings', name: '键位绑定', desc: 'bindings-cache.wtf', checked: true },
   { id: 'chat', name: '聊天设置', desc: 'chat-cache.txt', checked: true },
   { id: 'config', name: '游戏设置', desc: 'config-cache.wtf', checked: false },
+  { id: 'addons', name: '插件选择', desc: 'AddOns.txt', checked: true },
 ];
 
 const SERVER_SYNC_OPTIONS = [
@@ -1212,6 +1213,7 @@ async function syncChar(progressFill) {
     bindings: 'bindings-cache.wtf',
     chat: 'chat-cache.txt',
     config: 'config-cache.wtf',
+    addons: 'AddOns.txt',
   };
 
   const nameMap = {
@@ -1221,6 +1223,7 @@ async function syncChar(progressFill) {
     bindings: '键位绑定',
     chat: '聊天设置',
     config: '游戏设置',
+    addons: '插件选择',
   };
 
   for (const opt of opts) {
