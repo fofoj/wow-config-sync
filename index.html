@@ -742,8 +742,9 @@ h1 {
       <div class="scope-toggle">
         <button class="scope-btn active" onclick="setScope('char')" id="scopeChar">角色级别</button>
         <button class="scope-btn" onclick="setScope('server')" id="scopeServer">服务器级别</button>
+        <button class="scope-btn" onclick="setScope('account')" id="scopeAccount">账号级别</button>
       </div>
-      <p class="scope-desc">角色级别：同步单个角色的全部配置文件 &nbsp;|&nbsp; 服务器级别：同步服务器目录下的 SavedVariables</p>
+      <p class="scope-desc">角色级别：同步单个角色的全部配置 &nbsp;|&nbsp; 服务器级别：同步服务器 SavedVariables &nbsp;|&nbsp; 账号级别：跨账号同步账号级配置</p>
     </div>
 
     <!-- 双栏选择 -->
@@ -834,6 +835,13 @@ const CHAR_SYNC_OPTIONS = [
 
 const SERVER_SYNC_OPTIONS = [
   { id: 'server_savedvars', name: '服务器插件数据', desc: 'SavedVariables/', checked: true },
+];
+
+const ACCOUNT_SYNC_OPTIONS = [
+  { id: 'acc_savedvars', name: '账号插件数据', desc: 'SavedVariables/', checked: true },
+  { id: 'acc_macros', name: '账号通用宏', desc: 'macros-cache.txt', checked: true },
+  { id: 'acc_bindings', name: '账号键位绑定', desc: 'bindings-cache.wtf', checked: true },
+  { id: 'acc_config', name: '账号游戏设置', desc: 'config-cache.wtf', checked: false },
 ];
 
 // SVG 图标
@@ -930,6 +938,17 @@ function buildTreeHTML(side) {
   if (accounts.length === 0) return '<div class="empty-hint">' + ICONS.char + '未找到任何账号/角色</div>';
 
   let html = '';
+  if (currentScope === 'account') {
+    for (const acc of accounts) {
+      html += '<div class="tree-server"><div class="tree-server-name" onclick="selectAccount(\'' + side + '\',\'' + esc(acc) + '\', this)">'
+        + ICONS.account + ' ' + acc + '</div></div>';
+    }
+    if (accounts.length < 2) {
+      html += '<div class="empty-hint" style="padding:12px;font-size:0.8em;">仅检测到一个账号，账号级别同步需要至少两个账号</div>';
+    }
+    return html;
+  }
+
   const showAccount = accounts.length > 1;
   for (const acc of accounts) {
     const servers = Object.keys(accountsData[acc].servers);
@@ -1000,6 +1019,22 @@ function selectServer(side, account, server, el) {
   updateSyncSummary();
 }
 
+function selectAccount(side, account, el) {
+  const container = document.getElementById(side === 'source' ? 'sourceTree' : 'targetTree');
+  container.querySelectorAll('.tree-server-name.selected').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const sel = { account };
+  if (side === 'source') {
+    sourceSelection = sel;
+    showSelectionInfo('sourceInfo', account);
+  } else {
+    targetSelection = sel;
+    showSelectionInfo('targetInfo', account);
+  }
+  updateSyncSummary();
+}
+
 function showSelectionInfo(id, text) {
   const el = document.getElementById(id);
   el.innerHTML = ICONS.check + ' <span>' + text + '</span>';
@@ -1011,6 +1046,7 @@ function setScope(scope) {
   currentScope = scope;
   document.getElementById('scopeChar').classList.toggle('active', scope === 'char');
   document.getElementById('scopeServer').classList.toggle('active', scope === 'server');
+  document.getElementById('scopeAccount').classList.toggle('active', scope === 'account');
   sourceSelection = null;
   targetSelection = null;
   document.getElementById('sourceInfo').classList.remove('show');
@@ -1021,7 +1057,7 @@ function setScope(scope) {
 
 // ============ 选项 ============
 function renderOptions() {
-  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
+  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : currentScope === 'account' ? ACCOUNT_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
   document.getElementById('syncOptions').innerHTML = opts.map(o =>
     '<label class="sync-option">' +
       '<input type="checkbox" id="opt_' + o.id + '"' + (o.checked ? ' checked' : '') + '>' +
@@ -1039,10 +1075,18 @@ function updateSyncSummary() {
     btn.disabled = true;
     return;
   }
-  const srcLabel = sourceSelection.char ? sourceSelection.server + ' / ' + sourceSelection.char : sourceSelection.server;
-  const tgtLabel = targetSelection.char ? targetSelection.server + ' / ' + targetSelection.char : targetSelection.server;
+  const srcLabel = sourceSelection.char ? sourceSelection.server + ' / ' + sourceSelection.char
+    : sourceSelection.server ? sourceSelection.server : sourceSelection.account;
+  const tgtLabel = targetSelection.char ? targetSelection.server + ' / ' + targetSelection.char
+    : targetSelection.server ? targetSelection.server : targetSelection.account;
 
-  if (sourceSelection.account === targetSelection.account &&
+  if (currentScope === 'account') {
+    if (sourceSelection.account === targetSelection.account) {
+      el.innerHTML = '同一账号无需账号级别同步，账号级数据本身就是共享的';
+      btn.disabled = true;
+      return;
+    }
+  } else if (sourceSelection.account === targetSelection.account &&
       sourceSelection.server === targetSelection.server &&
       sourceSelection.char === targetSelection.char) {
     el.innerHTML = '源和目标相同，请选择不同的角色/服务器';
@@ -1170,6 +1214,8 @@ async function doSync() {
   try {
     if (currentScope === 'char') {
       await syncChar(progressFill);
+    } else if (currentScope === 'account') {
+      await syncAccount(progressFill);
     } else {
       await syncServer(progressFill);
     }
@@ -1262,8 +1308,57 @@ async function syncServer(progressFill) {
   progressFill.style.width = '90%';
 }
 
+async function getAccountDir(account) {
+  return await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(account);
+}
+
+async function syncAccount(progressFill) {
+  const src = sourceSelection;
+  const tgt = targetSelection;
+  log('源账号: ' + src.account, 'info');
+  log('目标账号: ' + tgt.account, 'info');
+
+  const srcDir = await getAccountDir(src.account);
+  const tgtDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(tgt.account, { create: true });
+
+  const opts = getCheckedOptions();
+  const total = opts.length;
+  let step = 0;
+
+  const fileMap = {
+    acc_macros: 'macros-cache.txt',
+    acc_bindings: 'bindings-cache.wtf',
+    acc_config: 'config-cache.wtf',
+  };
+
+  const nameMap = {
+    acc_savedvars: '账号插件数据',
+    acc_macros: '账号通用宏',
+    acc_bindings: '账号键位绑定',
+    acc_config: '账号游戏设置',
+  };
+
+  for (const opt of opts) {
+    step++;
+    progressFill.style.width = ((step / total) * 90) + '%';
+
+    if (opt === 'acc_savedvars') {
+      log('同步账号插件数据 (SavedVariables/)...', 'info');
+      const c = await copyDirectory(srcDir, tgtDir, 'SavedVariables');
+      log('账号插件数据: ' + c + ' 个文件已同步', 'success');
+    } else if (fileMap[opt]) {
+      log('同步' + nameMap[opt] + ' (' + fileMap[opt] + ')...', 'info');
+      if (await copyFile(srcDir, tgtDir, fileMap[opt])) {
+        log(nameMap[opt] + ': 完成', 'success');
+      } else {
+        log(fileMap[opt] + ' 不存在，已跳过', 'warn');
+      }
+    }
+  }
+}
+
 function getCheckedOptions() {
-  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
+  const opts = currentScope === 'char' ? CHAR_SYNC_OPTIONS : currentScope === 'account' ? ACCOUNT_SYNC_OPTIONS : SERVER_SYNC_OPTIONS;
   return opts.filter(function(o) {
     var el = document.getElementById('opt_' + o.id);
     return el && el.checked;
