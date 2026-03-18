@@ -1494,18 +1494,24 @@ async function cloneAccountSVByGUID(account, srcGUID, tgtGUID) {
   try {
     svDir = await accountDir.getDirectoryHandle('SavedVariables');
   } catch {
+    log('账号级 SavedVariables 不存在', 'warn');
     return 0;
   }
 
   let fileCount = 0;
+  let scannedFiles = 0;
+  let matchedFiles = 0;
 
   for await (const [name, handle] of svDir.entries()) {
     if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
+    scannedFiles++;
 
     const file = await handle.getFile();
     let content = await file.text();
 
     if (!content.includes(srcGUID)) continue;
+    matchedFiles++;
+    log('&nbsp;&nbsp;发现 ' + name + ' 包含源 GUID', 'info');
 
     const result = cloneEntryInLua(content, srcGUID, tgtGUID);
     if (result.count > 0) {
@@ -1515,9 +1521,12 @@ async function cloneAccountSVByGUID(account, srcGUID, tgtGUID) {
       syncStats.files++;
       fileCount++;
       log('&nbsp;&nbsp;' + name + ': ' + srcGUID + ' → ' + tgtGUID + ' (' + result.count + '处)', 'file');
+    } else {
+      log('&nbsp;&nbsp;' + name + ': 克隆返回 0（可能源条目为空）', 'warn');
     }
   }
 
+  log('GUID扫描: ' + scannedFiles + ' 个文件, ' + matchedFiles + ' 个包含源GUID', 'info');
   return fileCount;
 }
 
@@ -1541,35 +1550,44 @@ async function syncChar(progressFill) {
   if (opts.includes('clone_guid')) {
     log('提取角色 GUID（在复制前）...', 'info');
     srcGUID = await extractPlayerGUID(srcDir, src.char);
+    if (srcGUID) log('从角色SV提取源 GUID: ' + srcGUID, 'info');
     tgtGUID = await extractPlayerGUID(tgtCharDir, tgt.char);
-    // 如果角色级提取失败，从账号级 SV 中查找
+    if (tgtGUID) log('从角色SV提取目标 GUID: ' + tgtGUID, 'info');
+
+    // 同时从账号级 SV 搜索（角色级可能因为之前的同步被覆盖）
     if (!srcGUID || !tgtGUID) {
-      const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(src.account);
+      log('角色级提取不完整，搜索账号级 SV...', 'info');
+      const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(tgt.account);
       let accSvDir;
       try { accSvDir = await accountDir.getDirectoryHandle('SavedVariables'); } catch {}
       if (accSvDir) {
+        const charsToFind = [];
+        if (!srcGUID) charsToFind.push({ name: src.char, side: 'src' });
+        if (!tgtGUID) charsToFind.push({ name: tgt.char, side: 'tgt' });
+
         for await (const [name, handle] of accSvDir.entries()) {
-          if (srcGUID && tgtGUID) break;
+          if (charsToFind.every(c => c.found)) break;
           if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
           try {
             const file = await handle.getFile();
             const text = await file.text();
-            if (!srcGUID && text.includes(src.char)) {
-              const srcCharEsc = src.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const m = text.match(new RegExp('\\["' + srcCharEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'));
-              if (m) srcGUID = m[1];
-              if (!srcGUID) { const m2 = text.match(new RegExp('\\["' + srcCharEsc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"')); if (m2) srcGUID = m2[1]; }
-            }
-            if (!tgtGUID && text.includes(tgt.char)) {
-              const tgtCharEsc = tgt.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const m = text.match(new RegExp('\\["' + tgtCharEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'));
-              if (m) tgtGUID = m[1];
-              if (!tgtGUID) { const m2 = text.match(new RegExp('\\["' + tgtCharEsc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"')); if (m2) tgtGUID = m2[1]; }
+            for (const c of charsToFind) {
+              if (c.found) continue;
+              if (!text.includes(c.name)) continue;
+              const esc = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const m = text.match(new RegExp('\\["' + esc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'));
+              if (m) {
+                c.found = m[1];
+                if (c.side === 'src') srcGUID = m[1];
+                else tgtGUID = m[1];
+                log('从账号SV(' + name + ')提取' + c.name + ' GUID: ' + m[1], 'info');
+              }
             }
           } catch {}
         }
       }
     }
+
     if (srcGUID) log('源 GUID: ' + srcGUID, 'info');
     else log('无法提取源角色 GUID', 'warn');
     if (tgtGUID) log('目标 GUID: ' + tgtGUID, 'info');
