@@ -1182,6 +1182,8 @@ async function copyDirectory(srcDir, destDir, dirName, depth) {
 
     for await (const [name, handle] of srcSub.entries()) {
       if (handle.kind === 'file') {
+        // 跳过 .bak 文件，保留目标角色的原始备份（用于 GUID 提取等）
+        if (name.endsWith('.bak')) continue;
         const file = await handle.getFile();
         const content = await file.arrayBuffer();
         const destFile = await destSub.getFileHandle(name, { create: true });
@@ -1464,7 +1466,10 @@ async function extractPlayerGUID(charDir, charName) {
     '\\["' + charNameEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'
   );
 
-  const priorityFiles = ['Recount.lua', 'Details.lua', 'Spy.lua', 'DBM-Core.lua'];
+  const priorityFiles = [
+    'Recount.lua', 'Details.lua', 'Spy.lua', 'DBM-Core.lua',
+    'Recount.lua.bak', 'Details.lua.bak', 'Spy.lua.bak', 'DBM-Core.lua.bak',
+  ];
 
   for (const fname of priorityFiles) {
     try {
@@ -1602,6 +1607,38 @@ async function syncChar(progressFill) {
           } catch {}
         }
       }
+    }
+
+    // 尝试从缓存文件读取 GUID（上次同步时保存的）
+    if (!tgtGUID) {
+      try {
+        const f = await tgtCharDir.getFileHandle('.guid_cache');
+        const text = await (await f.getFile()).text();
+        const m = text.match(/(Player-\d+-[0-9A-Fa-f]{8})/);
+        if (m) { tgtGUID = m[1]; log('从缓存文件读取目标 GUID: ' + tgtGUID, 'info'); }
+      } catch {}
+    }
+    if (!srcGUID) {
+      try {
+        const f = await srcDir.getFileHandle('.guid_cache');
+        const text = await (await f.getFile()).text();
+        const m = text.match(/(Player-\d+-[0-9A-Fa-f]{8})/);
+        if (m) { srcGUID = m[1]; log('从缓存文件读取源 GUID: ' + srcGUID, 'info'); }
+      } catch {}
+    }
+
+    // 保存 GUID 到缓存文件，下次同步不会丢失
+    if (srcGUID) {
+      try {
+        const f = await srcDir.getFileHandle('.guid_cache', { create: true });
+        const w = await f.createWritable(); await w.write(srcGUID); await w.close();
+      } catch {}
+    }
+    if (tgtGUID) {
+      try {
+        const f = await tgtCharDir.getFileHandle('.guid_cache', { create: true });
+        const w = await f.createWritable(); await w.write(tgtGUID); await w.close();
+      } catch {}
     }
 
     if (srcGUID) log('源 GUID: ' + srcGUID, 'info');
