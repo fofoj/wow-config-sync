@@ -1380,7 +1380,8 @@ async function cloneAccountSVEntries(account, srcServer, srcChar, tgtServer, tgt
 }
 
 // 从角色的 SavedVariables 文件中提取 Player GUID
-async function extractPlayerGUID(charDir) {
+// charName 用于精确匹配：找 ["charName"] = { ... ["GUID"] = "Player-..." }
+async function extractPlayerGUID(charDir, charName) {
   let svDir;
   try {
     svDir = await charDir.getDirectoryHandle('SavedVariables');
@@ -1388,33 +1389,50 @@ async function extractPlayerGUID(charDir) {
     return null;
   }
 
-  // 常见的 GUID 存储模式: "Player-XXXX-XXXXXXXX"
-  const guidRegex = /["']?(Player-\d+-[0-9A-Fa-f]{8})["']?/;
+  const charNameEsc = charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // 优先从这些插件中提取（它们通常包含明确的 GUID 引用）
-  const priorityFiles = ['Details.lua', 'Recount.lua', 'Spy.lua', 'DBM-Core.lua', 'NDui.lua'];
+  // 方法1：在 Recount 中找 ["角色名"] = { ["GUID"] = "Player-..." }
+  // 方法2：在其他插件中找 ["角色名"] = "Player-..." (如 Details 的 combatant 表)
+  const nameGuidRegex = new RegExp(
+    '\\["' + charNameEsc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'
+  );
+  const nameBlockGuidRegex = new RegExp(
+    '\\["' + charNameEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'
+  );
+
+  const priorityFiles = ['Recount.lua', 'Details.lua', 'Spy.lua', 'DBM-Core.lua'];
 
   for (const fname of priorityFiles) {
     try {
       const fh = await svDir.getFileHandle(fname);
       const file = await fh.getFile();
       const text = await file.text();
-      // 查找 ["GUID"] = "Player-..." 或 ["serial"] = "Player-..."
-      const m = text.match(/\["(?:GUID|serial|guid)"\]\s*=\s*"(Player-\d+-[0-9A-Fa-f]{8})"/);
-      if (m) return m[1];
+      // 先尝试 block 模式: ["角色名"] = { ... ["GUID"] = "Player-..."
+      const m1 = text.match(nameBlockGuidRegex);
+      if (m1) return m1[1];
+      // 再尝试直接引用: ["角色名"] = "Player-..."
+      const m2 = text.match(nameGuidRegex);
+      if (m2) return m2[1];
     } catch {}
   }
 
-  // 兜底：扫描所有 lua 文件找第一个 GUID
-  for await (const [name, handle] of svDir.entries()) {
-    if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
-    try {
-      const file = await handle.getFile();
-      const text = await file.text();
-      const m = text.match(/\["(?:GUID|serial|guid)"\]\s*=\s*"(Player-\d+-[0-9A-Fa-f]{8})"/);
-      if (m) return m[1];
-    } catch {}
-  }
+  // 兜底：扫描账号级 SV 里找 ["角色名..."] = "Player-..." 或 block 模式
+  try {
+    const accountDir = charDir;
+    // 往上找 account 目录（charDir 的 parent 的 parent）
+    // 这里无法直接往上，所以改为扫描角色自己的 SV 文件
+    for await (const [name, handle] of svDir.entries()) {
+      if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
+      try {
+        const file = await handle.getFile();
+        const text = await file.text();
+        const m1 = text.match(nameBlockGuidRegex);
+        if (m1) return m1[1];
+        const m2 = text.match(nameGuidRegex);
+        if (m2) return m2[1];
+      } catch {}
+    }
+  } catch {}
 
   return null;
 }
@@ -1470,6 +1488,46 @@ async function syncChar(progressFill) {
   const total = opts.length;
   let step = 0;
 
+  // 在复制文件之前先提取 GUID（复制后目标文件会被覆盖导致 GUID 丢失）
+  let srcGUID = null, tgtGUID = null;
+  if (opts.includes('clone_guid')) {
+    log('提取角色 GUID（在复制前）...', 'info');
+    srcGUID = await extractPlayerGUID(srcDir, src.char);
+    tgtGUID = await extractPlayerGUID(tgtCharDir, tgt.char);
+    // 如果角色级提取失败，从账号级 SV 中查找
+    if (!srcGUID || !tgtGUID) {
+      const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(src.account);
+      let accSvDir;
+      try { accSvDir = await accountDir.getDirectoryHandle('SavedVariables'); } catch {}
+      if (accSvDir) {
+        for await (const [name, handle] of accSvDir.entries()) {
+          if (srcGUID && tgtGUID) break;
+          if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
+          try {
+            const file = await handle.getFile();
+            const text = await file.text();
+            if (!srcGUID && text.includes(src.char)) {
+              const srcCharEsc = src.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const m = text.match(new RegExp('\\["' + srcCharEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'));
+              if (m) srcGUID = m[1];
+              if (!srcGUID) { const m2 = text.match(new RegExp('\\["' + srcCharEsc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"')); if (m2) srcGUID = m2[1]; }
+            }
+            if (!tgtGUID && text.includes(tgt.char)) {
+              const tgtCharEsc = tgt.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const m = text.match(new RegExp('\\["' + tgtCharEsc + '"\\]\\s*=\\s*\\{[^}]*\\["GUID"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"'));
+              if (m) tgtGUID = m[1];
+              if (!tgtGUID) { const m2 = text.match(new RegExp('\\["' + tgtCharEsc + '"\\]\\s*=\\s*"(Player-\\d+-[0-9A-Fa-f]{8})"')); if (m2) tgtGUID = m2[1]; }
+            }
+          } catch {}
+        }
+      }
+    }
+    if (srcGUID) log('源 GUID: ' + srcGUID, 'info');
+    else log('无法提取源角色 GUID', 'warn');
+    if (tgtGUID) log('目标 GUID: ' + tgtGUID, 'info');
+    else log('无法提取目标角色 GUID（目标角色可能从未登录过）', 'warn');
+  }
+
   const fileMap = {
     layout: 'layout-local.txt',
     macros: 'macros-cache.txt',
@@ -1506,17 +1564,14 @@ async function syncChar(progressFill) {
         log('账号插件数据: 未找到需要克隆的条目', 'warn');
       }
     } else if (opt === 'clone_guid') {
-      log('提取角色 GUID...', 'info');
-      const srcGUID = await extractPlayerGUID(srcDir);
-      const tgtGUID = await extractPlayerGUID(tgtCharDir);
       if (!srcGUID) {
-        log('无法提取源角色 GUID，跳过', 'warn');
+        log('源角色 GUID 未知，跳过 GUID 克隆', 'warn');
       } else if (!tgtGUID) {
-        log('无法提取目标角色 GUID（目标角色可能从未登录过），跳过', 'warn');
+        log('目标角色 GUID 未知，跳过 GUID 克隆', 'warn');
       } else if (srcGUID === tgtGUID) {
-        log('源和目标 GUID 相同，跳过', 'warn');
+        log('源和目标 GUID 相同 (' + srcGUID + ')，跳过', 'warn');
       } else {
-        log('源 GUID: ' + srcGUID + '，目标 GUID: ' + tgtGUID, 'info');
+        log('克隆 GUID 插件数据: ' + srcGUID + ' → ' + tgtGUID, 'info');
         const c = await cloneAccountSVByGUID(tgt.account, srcGUID, tgtGUID);
         if (c > 0) {
           log('GUID插件数据: 在 ' + c + ' 个文件中克隆了数据', 'success');
