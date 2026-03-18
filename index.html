@@ -826,6 +826,7 @@ let syncStats = { files: 0, skipped: 0, errors: 0 };
 const CHAR_SYNC_OPTIONS = [
   { id: 'savedvars', name: '角色插件数据', desc: '角色/SavedVariables/', checked: true },
   { id: 'clone_sv', name: '克隆账号插件数据', desc: '按角色名克隆账号级SV', checked: true },
+  { id: 'clone_guid', name: '克隆GUID插件数据', desc: '按Player GUID克隆账号级SV', checked: true },
   { id: 'layout', name: '动作条布局', desc: 'layout-local.txt', checked: true },
   { id: 'macros', name: '宏', desc: 'macros-cache.txt', checked: true },
   { id: 'bindings', name: '键位绑定', desc: 'bindings-cache.wtf', checked: true },
@@ -1378,6 +1379,82 @@ async function cloneAccountSVEntries(account, srcServer, srcChar, tgtServer, tgt
   return fileCount;
 }
 
+// 从角色的 SavedVariables 文件中提取 Player GUID
+async function extractPlayerGUID(charDir) {
+  let svDir;
+  try {
+    svDir = await charDir.getDirectoryHandle('SavedVariables');
+  } catch {
+    return null;
+  }
+
+  // 常见的 GUID 存储模式: "Player-XXXX-XXXXXXXX"
+  const guidRegex = /["']?(Player-\d+-[0-9A-Fa-f]{8})["']?/;
+
+  // 优先从这些插件中提取（它们通常包含明确的 GUID 引用）
+  const priorityFiles = ['Details.lua', 'Recount.lua', 'Spy.lua', 'DBM-Core.lua', 'NDui.lua'];
+
+  for (const fname of priorityFiles) {
+    try {
+      const fh = await svDir.getFileHandle(fname);
+      const file = await fh.getFile();
+      const text = await file.text();
+      // 查找 ["GUID"] = "Player-..." 或 ["serial"] = "Player-..."
+      const m = text.match(/\["(?:GUID|serial|guid)"\]\s*=\s*"(Player-\d+-[0-9A-Fa-f]{8})"/);
+      if (m) return m[1];
+    } catch {}
+  }
+
+  // 兜底：扫描所有 lua 文件找第一个 GUID
+  for await (const [name, handle] of svDir.entries()) {
+    if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
+    try {
+      const file = await handle.getFile();
+      const text = await file.text();
+      const m = text.match(/\["(?:GUID|serial|guid)"\]\s*=\s*"(Player-\d+-[0-9A-Fa-f]{8})"/);
+      if (m) return m[1];
+    } catch {}
+  }
+
+  return null;
+}
+
+// 在账号级 SavedVariables 中按 GUID 克隆条目
+async function cloneAccountSVByGUID(account, srcGUID, tgtGUID) {
+  if (!srcGUID || !tgtGUID || srcGUID === tgtGUID) return 0;
+
+  const accountDir = await (await wtfHandle.getDirectoryHandle('Account')).getDirectoryHandle(account);
+  let svDir;
+  try {
+    svDir = await accountDir.getDirectoryHandle('SavedVariables');
+  } catch {
+    return 0;
+  }
+
+  let fileCount = 0;
+
+  for await (const [name, handle] of svDir.entries()) {
+    if (handle.kind !== 'file' || !name.endsWith('.lua')) continue;
+
+    const file = await handle.getFile();
+    let content = await file.text();
+
+    if (!content.includes(srcGUID)) continue;
+
+    const result = cloneEntryInLua(content, srcGUID, tgtGUID);
+    if (result.count > 0) {
+      const writable = await handle.createWritable();
+      await writable.write(result.content);
+      await writable.close();
+      syncStats.files++;
+      fileCount++;
+      log('&nbsp;&nbsp;' + name + ': ' + srcGUID + ' → ' + tgtGUID + ' (' + result.count + '处)', 'file');
+    }
+  }
+
+  return fileCount;
+}
+
 async function syncChar(progressFill) {
   const src = sourceSelection;
   const tgt = targetSelection;
@@ -1427,6 +1504,25 @@ async function syncChar(progressFill) {
         log('账号插件数据: 在 ' + c + ' 个文件中克隆了角色数据', 'success');
       } else {
         log('账号插件数据: 未找到需要克隆的条目', 'warn');
+      }
+    } else if (opt === 'clone_guid') {
+      log('提取角色 GUID...', 'info');
+      const srcGUID = await extractPlayerGUID(srcDir);
+      const tgtGUID = await extractPlayerGUID(tgtCharDir);
+      if (!srcGUID) {
+        log('无法提取源角色 GUID，跳过', 'warn');
+      } else if (!tgtGUID) {
+        log('无法提取目标角色 GUID（目标角色可能从未登录过），跳过', 'warn');
+      } else if (srcGUID === tgtGUID) {
+        log('源和目标 GUID 相同，跳过', 'warn');
+      } else {
+        log('源 GUID: ' + srcGUID + '，目标 GUID: ' + tgtGUID, 'info');
+        const c = await cloneAccountSVByGUID(tgt.account, srcGUID, tgtGUID);
+        if (c > 0) {
+          log('GUID插件数据: 在 ' + c + ' 个文件中克隆了数据', 'success');
+        } else {
+          log('GUID插件数据: 未找到需要克隆的条目', 'warn');
+        }
       }
     } else if (fileMap[opt]) {
       log('同步' + nameMap[opt] + ' (' + fileMap[opt] + ')...', 'info');
