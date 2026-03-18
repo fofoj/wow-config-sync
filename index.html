@@ -802,6 +802,7 @@ h1 {
       <div class="panel-title">
         <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
         同步日志
+        <button class="btn" style="margin-left:auto;padding:5px 14px;font-size:0.78em;" onclick="copyLog()">复制日志</button>
       </div>
       <div class="log-container" id="logContent"></div>
       <div class="stats-bar" id="statsBar" style="display:none;">
@@ -1112,6 +1113,21 @@ function log(msg, type) {
   entry.innerHTML = '<span class="log-time">' + time + '</span><span class="log-msg">' + msg + '</span>';
   content.appendChild(entry);
   content.scrollTop = content.scrollHeight;
+}
+
+function copyLog() {
+  const entries = document.querySelectorAll('#logContent .log-entry');
+  const text = Array.from(entries).map(e => {
+    const time = e.querySelector('.log-time')?.textContent || '';
+    const msg = e.querySelector('.log-msg')?.textContent || '';
+    return time + ' ' + msg;
+  }).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('#logPanel .btn');
+    const orig = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
 }
 
 function clearLog() {
