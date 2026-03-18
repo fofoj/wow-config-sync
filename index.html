@@ -966,7 +966,7 @@ function buildTreeHTML(side) {
     if (showAccount) {
       html += '<div class="tree-account" style="cursor:pointer;user-select:none;" onclick="toggleAccount(\'' + accId + '\', this)">'
         + '<span class="arrow">' + ICONS.chevron + '</span> ' + ICONS.account + ' ' + acc + '</div>';
-      html += '<div class="tree-acc-body show" id="' + accId + '">';
+      html += '<div class="tree-acc-body" id="' + accId + '">';
     }
     for (const srv of servers) {
       const srvId = side + '_' + acc + '_' + srv;
