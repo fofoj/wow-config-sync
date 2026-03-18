@@ -323,6 +323,13 @@ h1 {
 
 .tree-account svg { width: 12px; height: 12px; fill: #6b5a40; }
 
+.tree-account .arrow { display: inline-flex; transition: transform 0.25s; }
+.tree-account .arrow svg { width: 10px; height: 10px; fill: #6b5a40; }
+.tree-account.expanded .arrow { transform: rotate(90deg); }
+
+.tree-acc-body { transition: max-height 0.3s ease; }
+.tree-acc-body:not(.show) { max-height: 0; overflow: hidden; }
+
 .tree-server { margin-bottom: 4px; }
 
 .tree-server-name {
@@ -955,8 +962,11 @@ function buildTreeHTML(side) {
   const showAccount = accounts.length > 1;
   for (const acc of accounts) {
     const servers = Object.keys(accountsData[acc].servers);
+    const accId = side + '_acc_' + acc;
     if (showAccount) {
-      html += '<div class="tree-account">' + ICONS.account + ' ' + acc + '</div>';
+      html += '<div class="tree-account" style="cursor:pointer;user-select:none;" onclick="toggleAccount(\'' + accId + '\', this)">'
+        + '<span class="arrow">' + ICONS.chevron + '</span> ' + ICONS.account + ' ' + acc + '</div>';
+      html += '<div class="tree-acc-body show" id="' + accId + '">';
     }
     for (const srv of servers) {
       const srvId = side + '_' + acc + '_' + srv;
@@ -977,11 +987,29 @@ function buildTreeHTML(side) {
       }
       html += '</div>';
     }
+    if (showAccount) {
+      html += '</div>';
+    }
   }
   return html;
 }
 
 function esc(s) { return s.replace(/'/g, "\\'").replace(/\\/g, "\\\\"); }
+
+function toggleAccount(id, el) {
+  const body = document.getElementById(id);
+  if (body.classList.contains('show')) {
+    body.style.maxHeight = '0';
+    body.style.overflow = 'hidden';
+    body.classList.remove('show');
+    el.classList.remove('expanded');
+  } else {
+    body.style.maxHeight = '';
+    body.style.overflow = '';
+    body.classList.add('show');
+    el.classList.add('expanded');
+  }
+}
 
 function toggleServer(id, el) {
   const ul = document.getElementById(id);
