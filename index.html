@@ -1242,12 +1242,60 @@ async function doSync() {
 
 // 在账号级 SavedVariables 中克隆角色数据条目
 // 在 Lua 内容中查找 ["key"] = value 块并克隆为新 key
+function removeEntryInLua(content, key) {
+  const token = '["' + key + '"]';
+  let searchFrom = 0;
+
+  while (true) {
+    const keyIdx = content.indexOf(token, searchFrom);
+    if (keyIdx === -1) break;
+
+    let lineStart = content.lastIndexOf('\n', keyIdx);
+    lineStart = lineStart === -1 ? 0 : lineStart + 1;
+
+    const eqIdx = content.indexOf('=', keyIdx + token.length);
+    if (eqIdx === -1) { searchFrom = keyIdx + 1; continue; }
+
+    let valStart = eqIdx + 1;
+    while (valStart < content.length && (content[valStart] === ' ' || content[valStart] === '\t')) valStart++;
+
+    let blockEnd;
+    if (content[valStart] === '{') {
+      let depth = 1;
+      let pos = valStart + 1;
+      let inString = false;
+      while (pos < content.length && depth > 0) {
+        const ch = content[pos];
+        if (inString) { if (ch === '\\') { pos += 2; continue; } if (ch === '"') inString = false; }
+        else { if (ch === '"') inString = true; else if (ch === '{') depth++; else if (ch === '}') depth--; }
+        pos++;
+      }
+      blockEnd = pos;
+    } else {
+      blockEnd = valStart;
+      while (blockEnd < content.length && content[blockEnd] !== '\n') blockEnd++;
+    }
+
+    if (blockEnd < content.length && content[blockEnd] === ',') blockEnd++;
+    while (blockEnd < content.length && (content[blockEnd] === '\r' || content[blockEnd] === '\n')) { blockEnd++; break; }
+
+    content = content.substring(0, lineStart) + content.substring(blockEnd);
+    // Don't advance searchFrom since we removed content at the current position
+  }
+
+  return content;
+}
+
 function cloneEntryInLua(content, srcKey, tgtKey) {
   const srcToken = '["' + srcKey + '"]';
   const tgtToken = '["' + tgtKey + '"]';
 
-  if (content.includes(tgtToken)) return { content, count: 0 };
   if (!content.includes(srcToken)) return { content, count: 0 };
+
+  // 先删除已有的目标条目（可能是空条目），再克隆源数据
+  if (content.includes(tgtToken)) {
+    content = removeEntryInLua(content, tgtKey);
+  }
 
   let count = 0;
   let searchFrom = 0;
